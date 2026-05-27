@@ -29,10 +29,7 @@
     "active": true,
     "targets": "all",
     "resources": {
-      "../sidecar/dist": "sidecar/dist",
-      "../sidecar/node_modules/better-sqlite3": "sidecar/node_modules/better-sqlite3",
-      "../sidecar/node_modules/bindings": "sidecar/node_modules/bindings",
-      "../sidecar/node_modules/file-uri-to-path": "sidecar/node_modules/file-uri-to-path"
+      "../sidecar/dist": "sidecar/dist"
     },
     "icon": [
       "icons/32x32.png",

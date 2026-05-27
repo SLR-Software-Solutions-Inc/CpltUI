@@ -1,10 +1,32 @@
 // Read Copilot's local session sqlite store (~/.copilot/session-store.db) so
 // the UI can offer "Resume previous session". Read-only; we never mutate.
+//
+// better-sqlite3 is a NATIVE module — shipped only in dev. Production .app
+// bundles ship without it (notarization requires every embedded binary be
+// codesigned, which we don't yet do for the .node files). When the module
+// is missing, this handler silently degrades — UI shows empty history.
 
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { existsSync } from 'node:fs';
-import Database from 'better-sqlite3';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+
+type DbCtor = new (
+  path: string,
+  opts?: { readonly?: boolean; fileMustExist?: boolean },
+) => {
+  prepare: (sql: string) => { all: (...args: unknown[]) => unknown[] };
+  close: () => void;
+};
+
+let Database: DbCtor | null = null;
+try {
+  Database = require('better-sqlite3') as DbCtor;
+} catch {
+  /* native binding absent in production bundle — feature disabled */
+}
 
 export interface SessionHistoryItem {
   id: string;
@@ -22,9 +44,10 @@ function dbPath(): string {
 }
 
 export function loadSessionHistory(limit = 50): SessionHistoryItem[] {
+  if (!Database) return [];
   const path = dbPath();
   if (!existsSync(path)) return [];
-  let db: Database.Database | null = null;
+  let db: ReturnType<DbCtor> | null = null;
   try {
     db = new Database(path, { readonly: true, fileMustExist: true });
     const rows = db
