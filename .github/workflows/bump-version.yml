@@ -1,0 +1,88 @@
+name: Bump Version
+# Manual escape hatch. Force-bumps even if there are no new commits since the
+# last release tag. For automatic end-of-day releases, see release-scheduled.yml.
+# Uses the same capped-digit carry math: patch ∈ [0..9], minor ∈ [0..9], major ∈ [0..∞].
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-22.04
+    steps:
+      # NOTE: Uses CPLTUI_TOKEN (a PAT with `contents:write` + `workflows` scopes)
+      # instead of GITHUB_TOKEN. GitHub anti-recursion suppresses workflow triggers
+      # from default-token pushes, so a tag pushed via GITHUB_TOKEN would NOT fire
+      # release.yml's `on: push.tags` trigger. The PAT identity bypasses this.
+      # See docs/PUBLISHING.md for setup.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.CPLTUI_TOKEN }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Compute next version (capped-digit carry)
+        id: bump
+        run: |
+          CURRENT=$(cat VERSION)
+          IFS=. read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          PATCH=$((PATCH + 1))
+          if [ "$PATCH" -ge 10 ]; then
+            PATCH=0; MINOR=$((MINOR + 1))
+          fi
+          if [ "$MINOR" -ge 10 ]; then
+            MINOR=0; MAJOR=$((MAJOR + 1))
+          fi
+          NEW="${MAJOR}.${MINOR}.${PATCH}"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "next=$NEW" >> "$GITHUB_OUTPUT"
+          echo "Bumping $CURRENT -> $NEW"
+
+      - name: Write new version into all manifests
+        env:
+          NEW: ${{ steps.bump.outputs.next }}
+        run: |
+          echo "$NEW" > VERSION
+          node -e "let p=require('./package.json'); p.version='${NEW}'; require('fs').writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');"
+          node -e "let p=require('./sidecar/package.json'); p.version='${NEW}'; require('fs').writeFileSync('sidecar/package.json', JSON.stringify(p,null,2)+'\n');"
+          sed -i.bak -E "0,/^version = \".*\"/s//version = \"${NEW}\"/" src-tauri/Cargo.toml && rm src-tauri/Cargo.toml.bak
+          node -e "let p=require('./src-tauri/tauri.conf.json'); p.version='${NEW}'; require('fs').writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(p,null,2)+'\n');"
+          npm install --silent
+          ( cd sidecar && npm install --silent )
+
+      - name: Set up SSH signing
+        env:
+          SSH_KEY: ${{ secrets.OPENSOURCE_SSH_KEY }}
+          ALLOWED: ${{ secrets.OPENSOURCE_ALLOWED_SIGNERS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY"      > ~/.ssh/opensource_signing
+          chmod 600 ~/.ssh/opensource_signing
+          printf '%s\n' "$ALLOWED"      > ~/.ssh/opensource_allowed_signers
+          ssh-keygen -y -f ~/.ssh/opensource_signing > ~/.ssh/opensource_signing.pub
+          chmod 644 ~/.ssh/opensource_signing.pub
+          git config user.name "SLR Software Solutions"
+          git config user.email "opensource@slrsoft.ca"
+          git config user.signingKey ~/.ssh/opensource_signing.pub
+          git config gpg.format ssh
+          git config gpg.ssh.allowedSignersFile ~/.ssh/opensource_allowed_signers
+          git config commit.gpgsign true
+          git config tag.gpgsign true
+
+      - name: Commit + tag + push (triggers release.yml)
+        env:
+          NEW: ${{ steps.bump.outputs.next }}
+          CURRENT: ${{ steps.bump.outputs.current }}
+        run: |
+          git add VERSION package.json package-lock.json sidecar/package.json sidecar/package-lock.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
+          MSG="$(printf 'chore(release): manual bump %s -> %s\n\nManual escape hatch via workflow_dispatch. Capped-digit carry.\n' "$CURRENT" "$NEW")"
+          git commit -m "$MSG"
+          git tag -s "v$NEW" -m "CpltUI v$NEW"
+          git push origin HEAD:${GITHUB_REF#refs/heads/}
+          git push origin "v$NEW"

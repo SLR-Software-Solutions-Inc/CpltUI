@@ -1,0 +1,133 @@
+name: Scheduled Release
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # midnight UTC = 19:00 ET / 16:00 PT
+  workflow_dispatch:       # also allow manual fire
+
+permissions:
+  contents: write
+
+jobs:
+  maybe-bump:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.CPLTUI_TOKEN }}
+
+      - name: Check if non-docs commits exist since last release tag
+        id: check
+        # Skip the bump when every changed path since the last tag belongs to
+        # the docs/workflow ignore list below. `bump-version.yml` retains the
+        # manual force-bump escape hatch (it always bumps when triggered).
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            echo "no tags yet — bump"
+            echo "should_bump=true" >> "$GITHUB_OUTPUT"
+            echo "last_tag=" >> "$GITHUB_OUTPUT"
+          else
+            CHANGED=$(git diff --name-only "$LAST_TAG..HEAD")
+            if [ -z "$CHANGED" ]; then
+              echo "no changes since $LAST_TAG"
+              echo "should_bump=false" >> "$GITHUB_OUTPUT"
+            else
+              # Filter OUT docs/workflow paths; if any non-ignored file
+              # remains, bump. Ignore list (keep in sync with PR template):
+              #   .github/** .gitea/** docs/** README.md LICENSE NOTICE
+              #   SUPPORT.md .mailmap .gitignore
+              NONIGNORED=$(echo "$CHANGED" | grep -vE '^(\.github/|\.gitea/|docs/|README\.md$|LICENSE$|NOTICE$|SUPPORT\.md$|\.mailmap$|\.gitignore$)' || true)
+              if [ -z "$NONIGNORED" ]; then
+                echo "only docs/workflow changes — skipping release"
+                echo "::notice::Skipping release — only docs/workflow files changed since $LAST_TAG"
+                echo "should_bump=false" >> "$GITHUB_OUTPUT"
+              else
+                CODE_COUNT=$(echo "$NONIGNORED" | wc -l | tr -d ' ')
+                echo "$CODE_COUNT code file(s) changed — will bump"
+                echo "should_bump=true" >> "$GITHUB_OUTPUT"
+              fi
+            fi
+            echo "last_tag=$LAST_TAG" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute next version (capped-digit carry)
+        id: bump
+        if: steps.check.outputs.should_bump == 'true'
+        run: |
+          CURRENT=$(cat VERSION)
+          IFS=. read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          PATCH=$((PATCH + 1))
+          if [ "$PATCH" -ge 10 ]; then
+            PATCH=0; MINOR=$((MINOR + 1))
+          fi
+          if [ "$MINOR" -ge 10 ]; then
+            MINOR=0; MAJOR=$((MAJOR + 1))
+          fi
+          NEW="${MAJOR}.${MINOR}.${PATCH}"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "next=$NEW" >> "$GITHUB_OUTPUT"
+          echo "Bumping $CURRENT -> $NEW"
+
+      - name: Write new version into all manifests
+        if: steps.check.outputs.should_bump == 'true'
+        env:
+          NEW: ${{ steps.bump.outputs.next }}
+        run: |
+          echo "$NEW" > VERSION
+          # package.json
+          node -e "let p=require('./package.json'); p.version='${NEW}'; require('fs').writeFileSync('package.json', JSON.stringify(p,null,2)+'\n');"
+          # sidecar/package.json
+          node -e "let p=require('./sidecar/package.json'); p.version='${NEW}'; require('fs').writeFileSync('sidecar/package.json', JSON.stringify(p,null,2)+'\n');"
+          # src-tauri/Cargo.toml — sed on `^version = "..."` first occurrence (package version)
+          sed -i.bak -E "0,/^version = \".*\"/s//version = \"${NEW}\"/" src-tauri/Cargo.toml && rm src-tauri/Cargo.toml.bak
+          # src-tauri/tauri.conf.json (top-level "version")
+          node -e "let p=require('./src-tauri/tauri.conf.json'); p.version='${NEW}'; require('fs').writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(p,null,2)+'\n');"
+          # regenerate locks
+          npm install --silent
+          ( cd sidecar && npm install --silent )
+
+      - name: Set up SSH signing
+        if: steps.check.outputs.should_bump == 'true'
+        env:
+          SSH_KEY: ${{ secrets.OPENSOURCE_SSH_KEY }}
+          ALLOWED: ${{ secrets.OPENSOURCE_ALLOWED_SIGNERS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY"      > ~/.ssh/opensource_signing
+          chmod 600 ~/.ssh/opensource_signing
+          printf '%s\n' "$ALLOWED"      > ~/.ssh/opensource_allowed_signers
+          # Extract pubkey from private key — ssh-keygen -y
+          ssh-keygen -y -f ~/.ssh/opensource_signing > ~/.ssh/opensource_signing.pub
+          chmod 644 ~/.ssh/opensource_signing.pub
+          git config user.name "SLR Software Solutions"
+          git config user.email "opensource@slrsoft.ca"
+          git config user.signingKey ~/.ssh/opensource_signing.pub
+          git config gpg.format ssh
+          git config gpg.ssh.allowedSignersFile ~/.ssh/opensource_allowed_signers
+          git config commit.gpgsign true
+          git config tag.gpgsign true
+
+      - name: Commit + tag + push (triggers release.yml)
+        if: steps.check.outputs.should_bump == 'true'
+        env:
+          NEW: ${{ steps.bump.outputs.next }}
+          CURRENT: ${{ steps.bump.outputs.current }}
+        run: |
+          git add VERSION package.json package-lock.json sidecar/package.json sidecar/package-lock.json src-tauri/Cargo.toml src-tauri/tauri.conf.json
+          MSG="$(printf 'chore(release): bump version %s -> %s\n\nScheduled end-of-day release. Capped-digit carry: 1.0.9->1.1.0, 1.9.9->2.0.0.\n' "$CURRENT" "$NEW")"
+          git commit -m "$MSG"
+          git tag -s "v$NEW" -m "CpltUI v$NEW"
+          git push origin main
+          git push origin "v$NEW"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ steps.check.outputs.should_bump }}" = "true" ]; then
+            echo "::notice::Released v${{ steps.bump.outputs.next }}"
+          else
+            echo "::notice::No commits since ${{ steps.check.outputs.last_tag }} — skipped"
+          fi

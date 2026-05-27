@@ -1,0 +1,58 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "CpltUI",
+  "version": "1.0.0",
+  "identifier": "ca.slrsoft.cpltui",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "CpltUI",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": {
+      "../sidecar/dist": "sidecar/dist",
+      "../sidecar/node_modules/better-sqlite3": "sidecar/node_modules/better-sqlite3",
+      "../sidecar/node_modules/bindings": "sidecar/node_modules/bindings",
+      "../sidecar/node_modules/file-uri-to-path": "sidecar/node_modules/file-uri-to-path"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "entitlements": "entitlements.developer-id.plist"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/SLR-Software-Solutions-Inc/CpltUI/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZENjlFNzE3QkY3MkI3MEIKUldRTHQzSy9GK2RwYmNmNk9lcnR4WGtoZ250d1QweDBDdVEreFRDZFNibFJQRUlicWRaRGQ4VWoK"
+    }
+  }
+}

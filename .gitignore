@@ -1,0 +1,33 @@
+# Node
+node_modules/
+dist/
+.svelte-kit/
+.vite/
+
+# Rust
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# Secrets — NEVER COMMIT
+.env
+.env.local
+fastlane/.env
+fastlane/apple_api_key.json
+fastlane/report.xml
+fastlane/Preview.html
+
+# Builds
+*.dmg
+*.pkg
+*.app/
+
+# IDE
+.vscode/
+.idea/

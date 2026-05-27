@@ -1,0 +1,26 @@
+{
+  "name": "cpltui-sidecar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node dist/index.js",
+    "dev": "tsx index.ts"
+  },
+  "dependencies": {
+    "@github/copilot": "^1.0.54",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/diff": "^7.0.2",
+    "@zed-industries/agent-client-protocol": "^0.4.5",
+    "better-sqlite3": "^12.10.0",
+    "diff": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "esbuild": "^0.24.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
