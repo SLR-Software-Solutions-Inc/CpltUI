@@ -70,7 +70,7 @@ PASS — 5/5 assertions
 
 ## What Master must do to complete G14
 
-1. `cd ~/dev/tools/cpltui/worktrees/main && npm run tauri:dev`
+1. `cd ~/Developer/tools/cpltui/worktrees/main && npm run tauri:dev`
 2. App window opens. If Copilot CLI not authed: Onboarding modal appears with sign-in link.
 3. Either run `copilot` in another terminal to complete `/login`, OR set `COPILOT_GITHUB_TOKEN` env var before launching.
 4. Click "New session" in sidebar.
@@ -83,7 +83,7 @@ PASS — 5/5 assertions
 ## Known issues / out-of-scope
 
 - ClawdUI `main` build broken (pre-existing missing `@sentry/browser` + `@tauri-apps/plugin-clipboard-manager`) — not from this work
-- Full Tauri bundle (.app + .dmg) requires codesign cert; defer to CI workflow with `~/dev/secrets/certs/` integration
+- Full Tauri bundle (.app + .dmg) requires codesign cert; defer to CI workflow with `~/Documents/Secrets/Apple/certs/` integration
 - ACP `setSessionModel` is UNSTABLE in v1.0.54; `set_model` uses `/model` slash injection as workaround (FIXME in acpClient.ts)
 - ACP authenticate flow does NOT structured-carry the device-code uri+code back to the client; Onboarding modal instructs user to run `copilot` once in a terminal as the v1 fallback
 

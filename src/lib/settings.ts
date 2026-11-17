@@ -90,7 +90,7 @@ export const defaultSettings: Settings = {
   byokBaseUrl: 'https://api.anthropic.com/v1',
   byokApiKey: '',
   byokModel: 'claude-sonnet-4-5-20250929',
-  cwd: '~/dev/tools/cpltui',
+  cwd: '~/Developer/tools/cpltui',
   permissionMode: 'ask',
   premiumOnly: false,
   systemPrompt: '',  // empty = use sidecar's canonical HARNESS_SYSTEM_PROMPT (broadcast via harness_info event)
